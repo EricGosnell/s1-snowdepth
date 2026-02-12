@@ -15,16 +15,8 @@ import scipy.ndimage
 
 import sys
 
-sys.path.insert(1, '/data/leuven/357/vsc35702/_7_run_model/')
-from functions import *
-
-### ------ ML model version ------ #####
-version = 'final_model_xg'
-
-### ------ FOLDERS ------ #####
-s1_folder = '/staging/leuven/stg_00024/OUTPUT/devond/S1_ML_project/DATA/S1_Alps_1km/'
-s1_scale_folder = '/staging/leuven/stg_00024/OUTPUT/devond/S1_ML_project/DATA/S1_1km_scaling_factors/'
-sc_folder = '/staging/leuven/stg_00024/OUTPUT/devond/S1_ML_project/DATA/snowcover/MODIS_IMS_cumulative_100m/'
+from s1_snowdepth.config import Config
+from s1_snowdepth.run.ml_snow_functions import prep_data, reproject_m
 
 ### ------ UNIVERSAL VARIABLES ------ #####
 numeric_features = ['elevation', 'slope', 'aspect', 'fcf', 'tpi', 'DayOfSeason', 'vv_scaled', 'cr_scaled', 'lia',
@@ -33,31 +25,27 @@ categorical_features = ['snowclass']
 all_features = numeric_features.copy()
 all_features.extend(categorical_features)
 
-static_var = xr.open_dataset(
-    '/staging/leuven/stg_00024/OUTPUT/devond/S1_ML_project/DATA/time_independent_var/all_static_var.nc').transpose(
-    'lat', 'lon')
-snow_classes = xr.open_dataset(
-    '/staging/leuven/stg_00024/OUTPUT/devond/S1_ML_project/DATA/time_independent_var/snowclass.nc').transpose('lat',
-                                                                                                              'lon')
-landcover = xr.open_dataset(
-    '/staging/leuven/stg_00024/OUTPUT/devond/S1_ML_project/DATA/time_independent_var/landcover_1.nc').transpose('lat',
-                                                                                                                'lon')
+cfg = Config()
+
+static_var = xr.open_dataset(cfg.static_var_path).transpose('lat', 'lon')
+snow_classes = xr.open_dataset(cfg.snow_class_path).transpose('lat', 'lon')
+landcover = xr.open_dataset(cfg.landcover_path).transpose('lat', 'lon')
 static_var['snow_class'] = snow_classes['class']
 static_var['lc'] = landcover['lc']
-grid = xr.open_dataset('/staging/leuven/stg_00024/OUTPUT/devond/S1_ML_project/DATA/time_independent_var/grid_lowres.nc')
 static_var.rio.write_crs("EPSG:4326", inplace=True)
-glaciers = xr.open_dataset(
-    '/staging/leuven/stg_00024/OUTPUT/devond/S1_ML_project/DATA/time_independent_var/glacier_raster.nc')
+grid = xr.open_dataset(cfg.grid_path)
+glaciers = xr.open_dataset(cfg.glacier_path)
 
-model = load_model(f'/staging/leuven/stg_00024/OUTPUT/devond/S1_ML_project/models/{version}')
+model = load_model(cfg.model_path / cfg.model_version)
 
-# inputt = sys.argv[1]
-s1_files = glob(f'/staging/leuven/stg_00024/OUTPUT/devond/S1_ML_project/DATA/S1_mosaic/*.nc')[1:3]
-# print(s1_files)
+s1_files = glob(str(cfg.s1_mosaic_dir / '*.nc'))[1:3]
 
-output_folder = '/staging/leuven/stg_00024/OUTPUT/devond/S1_ML_project/OUTPUT/SD_temp/'
-finished_files = glob(f'{output_folder}*.nc')
+output_folder = cfg.output_dir
+output_folder.mkdir(parents=True, exist_ok=True)
+finished_files = glob(str(output_folder / '*.nc'))
 print(finished_files)
+
+
 ##### ------ CODE ------ #####
 
 for f in s1_files:
@@ -70,15 +58,11 @@ for f in s1_files:
 
     out_file = f'{output_folder}S1_ml_SD_{date}_{orbit}.nc'
 
-    if out_file not in finished_files and orbit not in ['051', '037'] and month not in ['06', '07',
-                                                                                        '08'] and ym not in ['201501',
-                                                                                                             '201502',
-                                                                                                             '201503',
-                                                                                                             '201504',
-                                                                                                             '201505']:
+    if (out_file not in finished_files and orbit not in cfg.skip_orbits and month not in cfg.skip_months and ym not in
+            ['201501','201502','201503','201504','201505']):
 
         print('prepping data')
-        all_var, df_x = prep_data(date, orbit, static_var)
+        all_var, df_x = prep_data(date, orbit, static_var, cfg)
 
         df_nonan = df_x[all_features]
         df_nonan = df_nonan.dropna()  # .reset_index(drop = True)

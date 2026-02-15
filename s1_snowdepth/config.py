@@ -4,7 +4,13 @@ from dotenv import load_dotenv, find_dotenv
 
 class Config:
     """
-    TODO: docs
+    Configuration class for running the model.
+
+    Reads environment variables in from a .env file (searched for upwards from the current working directory), and
+    stores all input/ouput paths and runtime parameters. Any variable can be overridden by passing it as an argument,
+    which takes precedence over the .env file.
+
+    See .env.example for and example of how each variable should be defined in the .env.
     """
 
     def __init__ (self,

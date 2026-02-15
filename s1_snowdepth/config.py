@@ -76,5 +76,7 @@ class Config:
         )
 
         # Runtime configs
-        self.skip_orbits = skip_orbits
-        self.skip_months = skip_months
+        env_orbits = os.environ.get("SKIP_ORBITS")
+        self.skip_orbits = tuple(env_orbits.split(",")) if env_orbits else skip_orbits
+        env_months = os.environ.get("SKIP_MONTHS")
+        self.skip_months = tuple(env_months.split(",")) if env_months else skip_months

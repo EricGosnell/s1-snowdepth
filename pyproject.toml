@@ -16,7 +16,8 @@ dependencies = [
     "scipy",
     "pycaret[full]",
     "shap",
-    "python-dotenv"
+    "python-dotenv",
+    "asf_search",
 ]
 
 [tool.setuptools.packages.find]

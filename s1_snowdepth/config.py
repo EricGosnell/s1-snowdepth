@@ -32,6 +32,10 @@ class Config:
           # Runtime configs
           skip_orbits: tuple = ("051", "037"),
           skip_months: tuple = ("06", "07", "08"),
+
+          # Download configs
+          asf_username: str = None,
+          asf_password: str = None,
     ):
         # Load .env file into os.environment
         load_dotenv(find_dotenv(usecwd=True))
@@ -86,3 +90,13 @@ class Config:
         self.skip_orbits = tuple(env_orbits.split(",")) if env_orbits else skip_orbits
         env_months = os.environ.get("SKIP_MONTHS")
         self.skip_months = tuple(env_months.split(",")) if env_months else skip_months
+
+        # Download configs
+        self.asf_username = (
+                asf_username
+                or str(os.environ.get("ASF_USERNAME"))
+        )
+        self.asf_password = (
+                asf_password
+                or str(os.environ.get("ASF_PASSWORD"))
+        )

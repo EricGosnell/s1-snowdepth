@@ -36,6 +36,7 @@ class Config:
           # Download configs
           asf_username: str = None,
           asf_password: str = None,
+          asf_search_bbox: str = None,
     ):
         # Load .env file into os.environment
         load_dotenv(find_dotenv(usecwd=True))
@@ -99,4 +100,8 @@ class Config:
         self.asf_password = (
                 asf_password
                 or str(os.environ.get("ASF_PASSWORD"))
+        )
+        self.asf_search_bbox = (
+            asf_search_bbox
+            or os.environ.get("ASF_SEARCH_BBOX","")
         )

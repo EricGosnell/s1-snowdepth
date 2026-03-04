@@ -37,6 +37,8 @@ class Config:
           asf_username: str = None,
           asf_password: str = None,
           asf_search_bbox: str = None,
+          gee_project: str = None,
+          gee_search_bbox = None,
     ):
         # Load .env file into os.environment
         load_dotenv(find_dotenv(usecwd=True))
@@ -104,4 +106,12 @@ class Config:
         self.asf_search_bbox = (
             asf_search_bbox
             or os.environ.get("ASF_SEARCH_BBOX","")
+        )
+        self.gee_project = (
+            gee_project
+            or os.environ.get("GEE_PROJECT","")
+        )
+        self.gee_search_bbox = (
+            gee_search_bbox
+            or [float(x) for x in os.environ.get("GEE_SEARCH_BBOX", "5,43,17,48").split(",")]
         )

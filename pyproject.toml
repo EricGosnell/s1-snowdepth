@@ -18,6 +18,7 @@ dependencies = [
     "shap",
     "python-dotenv",
     "asf_search",
+    "earthengine-api",
 ]
 
 [project.optional-dependencies]

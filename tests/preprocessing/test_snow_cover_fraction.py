@@ -1,7 +1,8 @@
 from pathlib import Path
 
 from s1_snowdepth.config import Config
-from s1_snowdepth.preprocessing.snow_cover_fraction import load_ims, load_modis, gap_fill_modis
+from s1_snowdepth.preprocessing.snow_cover_fraction import (load_ims, load_modis, gap_fill_modis,
+                                                            compute_scf, compute_cumulative_scf)
 from s1_snowdepth.download.ims import download_ims
 from s1_snowdepth.download.modis import download_modis
 
@@ -77,7 +78,45 @@ def test_gap_fill_modis():
     assert (null_before == 0) or (null_after < null_before)
 
 
+def test_compute_scf():
+    cfg = Config()
+
+    date = "20190301"
+    ims_dir = Path(__file__).parent.parent / "data" / "ims"
+    modis_dir = Path(__file__).parent.parent / "data" / "modis"
+
+    scf = compute_scf(date, ims_dir, modis_dir, cfg)
+    print(f"SCF shape: {scf.shape}\n"
+          f"    CRS: {scf.rio.crs}\n"
+          f"    min: {float(scf.min()):.3f}\n"
+          f"    max: {float(scf.max()):.3f}\n"
+          f"    null pixels: {int(scf.isnull().sum())}\n"
+    )
+
+    # Convert to raster
+    output_dir = Path(__file__).parent.parent / "data" / "snow_cover"
+    output_dir.mkdir(parents=True, exist_ok=True)
+    scf.rio.to_raster(str(output_dir / f"scf_{date}.tif"))
+
+    assert float(scf.min()) >= 0 and float(scf.max()) <= 1
+
+
+def test_compute_cumulative_scf():
+    # This is a poor test to avoid downloading lots of data. Should be done using mock data
+    cfg = Config()
+
+    date = "20180802"
+    ims_dir = Path(__file__).parent.parent / "data" / "ims"
+    modis_dir = Path(__file__).parent.parent / "data" / "modis"
+
+    cscf = compute_cumulative_scf(date, ims_dir, modis_dir, cfg)
+
+    assert float(cscf.sc_percum.mean()) >= float(cscf.sc_per.mean())
+
+
 if __name__ == "__main__":
     # test_load_ims()
-    test_load_modis()
-    test_gap_fill_modis()
+    # test_load_modis()
+    # test_gap_fill_modis()
+    # test_compute_scf()
+    test_compute_cumulative_scf()

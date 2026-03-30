@@ -2,6 +2,7 @@ from pathlib import Path
 import xarray as xr
 import rioxarray
 from datetime import datetime, timedelta
+from rasterio.enums import Resampling
 
 from s1_snowdepth.config import Config
 from s1_snowdepth.download.ims import download_ims
@@ -97,17 +98,63 @@ def gap_fill_modis(date: str, modis_dir: Path, cfg: Config, lookback_days: int =
     return weighted_sum / weight_total.where(weight_total > 0)
 
 
-def compute_scf(date: str, ims_dir: Path, cfg: Config) -> xr.DataArray:
+def compute_scf(date: str, ims_dir: Path, modis_dir: Path, cfg: Config) -> xr.DataArray:
     """
     TODO: docs
     :param date:
     :param ims_dir:
+    :param modis_dir:
     :param cfg:
     :return:
     """
+    # Load IMS
     ims_path = download_ims(date, ims_dir, cfg)
     ims = load_ims(ims_path, cfg)
 
-    # TODO: modis
+    # Load and gap-fill MODIS
+    modis_filled = gap_fill_modis(date, modis_dir, cfg)
 
-    return ims
+    # Resample IMS to MODIS
+    modis_filled.rio.write_crs("EPSG:4326", inplace=True)
+    ims_resampled = ims.rio.reproject_match(modis_filled, resampling=Resampling.average)
+
+    # Average IMS and gap-filled MODIS
+    scf = (ims_resampled + modis_filled) / 2
+
+    return scf
+
+
+def compute_cumulative_scf(date: str, ims_dir: Path, modis_dir: Path, cfg: Config) -> xr.Dataset:
+    """
+    TODO: docs
+    :param date:
+    :param ims_dir:
+    :param modis_dir:
+    :param cfg:
+    :return:
+    """
+    date_dt = datetime.strptime(date, "%Y%m%d")
+    month = date_dt.month
+    year = date_dt.year
+
+    # Snow year starts August 1
+    snow_year_start = datetime(year if month >= 8 else year -1, 8, 1)
+
+    cumulative = None
+    current = snow_year_start
+    while current < date_dt:
+        d = current.strftime("%Y%m%d")
+        print(f"Computing scf for {d}...")
+        scf = compute_scf(d, ims_dir, modis_dir, cfg)
+        cumulative = scf if cumulative is None else cumulative + scf
+        current += timedelta(days=1)
+
+    print(f"Computing scf for {date}...")
+    scf_today = compute_scf(date, ims_dir, modis_dir, cfg)
+    cumulative = scf_today if cumulative is None else cumulative + scf_today
+
+    drop = ["time", "spatial_ref", "band"]
+    return xr.Dataset({
+        "sc_per": scf_today.drop_vars(drop, errors="ignore").rename({"x": "lon", "y": "lat"}),
+        "sc_percum": cumulative.drop_vars(drop, errors="ignore").rename({"x": "lon", "y": "lat"})
+    })

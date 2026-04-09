@@ -171,9 +171,13 @@ def prep_data(date, orbit, static_var, cfg: Config):
     file = cfg.s1_mosaic_dir / f'S1mosaic_{date}_{orbit}_2.nc'
 
     s1 = xr.open_dataset(file)
-    s1 = s1.mean(dim='time')  # get rid of time dimension
+    s1 = s1.transpose('lat', 'lon')
+    if 'VV' in s1:
+        s1 = s1.rename({'VV': 'g0vv', 'CR': 'g0vh', 'LIA': 'lia'})
+    if 'time' in s1.dims: s1 = s1.mean(dim='time')  # get rid of time dimension
 
-    s1_scale = xr.open_dataset(cfg.s1_scaling_dir / f'S1_{year}_{orbit}_scale.nc')
+    s1_scale = xr.open_dataset(cfg.s1_scaling_dir / f'S1_{year}_{orbit}_scale.nc').transpose('lat', 'lon')
+    s1_scale = s1_scale.reindex_like(s1, method='nearest')
     s1['vv_scaled'] = s1.g0vv - s1_scale.g0vv
     s1['cr_scaled'] = s1.g0vh - s1.g0vv - s1_scale.cr
     s1 = s1.drop(['g0vv', 'g0vh'])
@@ -187,8 +191,13 @@ def prep_data(date, orbit, static_var, cfg: Config):
 
     # sccum_data = prep_variable(f'{sc_cum_folder}sc_perc_{date}_.nc', lon_crop.min()-1, lon_crop.max()+1, lat_crop.max()+1, lat_crop.min()-1, static_crop, 500)
     sc_data = xr.open_dataset(cfg.snow_cover_dir / f'snowcover_{date}_.nc')
-    sc_data = sc_data.sel(lat=slice(lat_crop.max(), lat_crop.min()),
-                          lon=slice(lon_crop.min(), lon_crop.max()))  # crop data
+    if sc_data.lat.values[0] < sc_data.lat.values[-1]:  # ascending lat
+        sc_data = sc_data.sel(lat=slice(lat_crop.min(), lat_crop.max()),
+                              lon=slice(lon_crop.min(), lon_crop.max()))  # crop data
+    else:  # descending lat
+        sc_data = sc_data.sel(lat=slice(lat_crop.max(), lat_crop.min()),
+                              lon=slice(lon_crop.min(), lon_crop.max()))  # crop data
+    sc_data = sc_data.reindex_like(s1, method='nearest')  # reproject to match s1 grid
 
     all_var = xr.merge([s1, static_crop, sc_data])  # merge all datasets
 

@@ -20,6 +20,8 @@ dependencies = [
     "asf_search",
     "earthengine-api",
     "netcdf4",
+    "click",
+    "joblib",
 ]
 
 [project.optional-dependencies]
@@ -30,4 +32,7 @@ dev = [
 
 [tool.setuptools.packages.find]
 where = ["."]
+
+[project.scripts]
+s1-snowdepth = "s1_snowdepth.cli:main"
 

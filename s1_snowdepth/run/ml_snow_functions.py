@@ -1,16 +1,11 @@
 import xarray as xr
-import pickle
 import pandas as pd
 import numpy as np
-import warnings
-
-warnings.filterwarnings("ignore")
 import shap
-from glob import glob
 from rasterio.enums import Resampling
-import rioxarray
 import scipy as sp
-import scipy.ndimage
+import warnings
+warnings.filterwarnings("ignore")
 
 from s1_snowdepth.config import Config
 

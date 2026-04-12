@@ -14,14 +14,12 @@ dependencies = [
     "rioxarray",
     "rasterio",
     "scipy",
-    "pycaret[full]",
-    "shap",
     "python-dotenv",
     "asf_search",
     "earthengine-api",
     "netcdf4",
     "click",
-    "joblib",
+    "requests",
 ]
 
 [project.optional-dependencies]
@@ -32,6 +30,9 @@ dev = [
 
 [tool.setuptools.packages.find]
 where = ["."]
+
+[tool.setuptools.package-data]
+s1-snowdepth = ["environment.yml", ".env.example"]
 
 [project.scripts]
 s1-snowdepth = "s1_snowdepth.cli:main"

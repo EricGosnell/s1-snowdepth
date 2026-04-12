@@ -1,24 +1,18 @@
-from pycaret.regression import *
 import joblib
 import xarray as xr
-import pickle
 import sys
+from glob import glob
+import numpy as np
+
+import warnings
+warnings.filterwarnings("ignore")
+
 import pandas as pd
 import pandas.core.indexes.base as base
 sys.modules['pandas.core.index.numeric'] = base
 base.Int64Index = pd.Index
 base.Float64Index = pd.Index
 
-import numpy as np
-import warnings
-
-warnings.filterwarnings("ignore")
-import shap
-from glob import glob
-from rasterio.enums import Resampling
-import rioxarray
-import scipy as sp
-import scipy.ndimage
 
 from s1_snowdepth.config import Config
 from s1_snowdepth.run.ml_snow_functions import prep_data, reproject_m
@@ -42,8 +36,7 @@ def run(cfg: Config):
 
     model = joblib.load(cfg.model_path / f'{cfg.model_version}.pkl')
 
-    s1_files = glob(str(cfg.s1_mosaic_dir / '*.nc'))[1:3]
-
+    s1_files = glob(str(cfg.s1_mosaic_dir / '*.nc'))
 
     output_folder = cfg.output_dir
     output_folder.mkdir(parents=True, exist_ok=True)
@@ -61,7 +54,7 @@ def run(cfg: Config):
         year = date[0:4]
         print(date, orbit, year)
 
-        out_file = f'{output_folder}S1_ml_SD_{date}_{orbit}.nc'
+        out_file = f'{output_folder}/S1_ml_SD_{date}_{orbit}.nc'
 
         if (out_file not in finished_files and orbit not in cfg.skip_orbits and month not in cfg.skip_months and ym not in
                 ['201501','201502','201503','201504','201505']):

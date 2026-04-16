@@ -41,6 +41,38 @@ def env_create():
     )
 
 @main.command()
+@click.argument("output_dir")
+def download_static_vars(output_dir):
+    """Download static variables to OUTPUT_DIR."""
+    try:
+        from huggingface_hub import snapshot_download
+    except ImportError:
+        raise click.ClickException(
+            "huggingface_hub is required to download static variables. "
+            "Install it with: pip install huggingface-hub"
+        )
+    output_dir = Path(output_dir)
+    output_dir.mkdir(parents=True, exist_ok=True)
+    click.echo("Downloading static variables...")
+    snapshot_download(
+        repo_id="EricGosnell/S1-Snowdepth-Static-Variables",
+        repo_type="dataset",
+        local_dir=str(output_dir),
+    )
+    click.echo(f"Static variables saved to {output_dir}. Set the path in your .env accordingly.")
+
+@main.command()
+@click.argument("output_dir", default=".", required=False)
+def download_model(output_dir):
+    """Download final_model_xg.pkl to OUTPUT_DIR."""
+    output_dir = Path(output_dir)
+    output_dir.mkdir(parents=True, exist_ok=True)
+    click.echo("Downloading final_model_xg.pkl...")
+    with importlib.resources.files("s1_snowdepth").joinpath("final_model_xg.pkl") as pkl_src:
+        shutil.copy(str(pkl_src), output_dir / "final_model_xg.pkl")
+    click.echo(f"final_model_xg.pkl downloaded to {output_dir}/final_model_xg.pkl. Set the path in your .env accordingly.")
+
+@main.command()
 def run():
     """Run the snow depth estimation model over all S1 mosaic files."""
     import sys

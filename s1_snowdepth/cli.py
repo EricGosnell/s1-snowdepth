@@ -41,9 +41,23 @@ def env_create():
     )
 
 @main.command()
-@click.argument("output_dir")
+@click.argument("output_dir", default=".", required=False)
+def download_model(output_dir):
+    """Download final_model_xg.pkl to OUTPUT_DIR (default: current directory)."""
+    output_dir = Path(output_dir)
+    output_dir.mkdir(parents=True, exist_ok=True)
+    click.echo("Downloading final_model_xg.pkl...")
+    with importlib.resources.files("s1_snowdepth").joinpath("final_model_xg.pkl") as pkl_src:
+        shutil.copy(str(pkl_src), output_dir / "final_model_xg.pkl")
+    click.echo(f"final_model_xg.pkl downloaded to {output_dir}/final_model_xg.pkl.")
+    click.echo(f"Update your .env to point to the model file:\n"
+               f"  MODEL_PATH={output_dir}\n"
+               f"  MODEL_VERSION=final_model_xg\n")
+
+@main.command()
+@click.argument("output_dir", default="static_vars", required=False)
 def download_static_vars(output_dir):
-    """Download static variables to OUTPUT_DIR."""
+    """Download static variables to OUTPUT_DIR (default: static_vars)."""
     try:
         from huggingface_hub import snapshot_download
     except ImportError:
@@ -59,18 +73,41 @@ def download_static_vars(output_dir):
         repo_type="dataset",
         local_dir=str(output_dir),
     )
-    click.echo(f"Static variables saved to {output_dir}. Set the path in your .env accordingly.")
+    click.echo(f"Static variables saved to {output_dir}.")
+    click.echo(f"Update your .env to point to the static variables:\n"
+               f"  STATIC_VAR_PATH={output_dir}/all_static_var.nc\n"
+               f"  SNOW_CLASS_PATH={output_dir}/snowclass.nc\n"
+               f"  LANDCOVER_PATH={output_dir}/landcover_1.nc\n"
+               f"  GRID_PATH={output_dir}/grid_lowres.nc\n"
+               f"  GLACIER_PATH={output_dir}/glacier_raster.nc\n")
+
 
 @main.command()
 @click.argument("output_dir", default=".", required=False)
-def download_model(output_dir):
-    """Download final_model_xg.pkl to OUTPUT_DIR."""
+def download_sample_data(output_dir):
+    """Download sample input files for testing the model to OUTPUT_DIR (default: current directory)."""
+    try:
+        from huggingface_hub import snapshot_download
+    except ImportError:
+        raise click.ClickException(
+            "huggingface_hub is required to download sample data. "
+            "Install it with: pip install huggingface-hub"
+        )
     output_dir = Path(output_dir)
     output_dir.mkdir(parents=True, exist_ok=True)
-    click.echo("Downloading final_model_xg.pkl...")
-    with importlib.resources.files("s1_snowdepth").joinpath("final_model_xg.pkl") as pkl_src:
-        shutil.copy(str(pkl_src), output_dir / "final_model_xg.pkl")
-    click.echo(f"final_model_xg.pkl downloaded to {output_dir}/final_model_xg.pkl. Set the path in your .env accordingly.")
+    click.echo("Downloading sample data...")
+    snapshot_download(
+        repo_id="EricGosnell/S1-Snowdepth-Sample-Data",
+        repo_type="dataset",
+        local_dir=str(output_dir),
+    )
+    click.echo(f"Sample data saved to {output_dir}.")
+    click.echo(
+        "Update your .env to point to the sample data:\n"
+        f"  S1_MOSAIC_DIR={output_dir}/s1_mosaic/\n"
+        f"  S1_SCALING_DIR={output_dir}/s1_scaling/\n"
+        f"  SNOW_COVER_DIR={output_dir}/snow_cover/\n"
+    )
 
 @main.command()
 def run():

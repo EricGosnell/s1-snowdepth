@@ -186,11 +186,12 @@ def _filter_products_for_date_orbit(product_dirs: list, date: str, scenes: list)
 
 def _read_rtc_product(product_dir: Path) -> xr.Dataset:
     """
-    Read an unzipped HyP3 RTC product into an xarray Dataset with VV (dB), VH (dB), and LIA (deg).
-    HyP3 outputs linear-power gamma0 GeoTIFFs and an incidence-angle map (radians).
+    Read an unzipped HyP3 RTC product into an xarray Dataset with VV and VH in linear gamma0 power, and LIA in degrees.
+    We deliberately keep VV and VH in linear power so they can be safely spatially averaged when reprojecting to
+    coarser grids (averaging dB values is not physically meaningful).
 
     :param product_dir: Path to an extracted HyP3 RTC product directory
-    :return: xr.Dataset with data_vars VV, VH, LIA on the product's native CRS/grid
+    :return: xr.Dataset with data_vars VV (linear), VH (linear), LIA (deg) on the product's native CRS/grid
     """
     name = product_dir.name
     vv_path = product_dir / f"{name}_VV.tif"
@@ -201,18 +202,20 @@ def _read_rtc_product(product_dir: Path) -> xr.Dataset:
     vh = rioxarray.open_rasterio(vh_path).squeeze(drop=True)
     inc = rioxarray.open_rasterio(inc_path).squeeze(drop=True)
 
-    vv_db = 10.0 * np.log10(vv.where(vv > 0))
-    vh_db = 10.0 * np.log10(vh.where(vh > 0))
-    lia_deg = np.rad2deg(inc.where(inc > 0))
+    vv_lin = vv.where(vv > 0).astype("float64")
+    vh_lin = vh.where(vh > 0).astype("float64")
+    lia_deg = np.rad2deg(inc.where(inc > 0)).astype("float64")
 
     ds = xr.Dataset(
         {
-            "VV": vv_db,
-            "CR": vh_db,
+            "VV": vv_lin,
+            "VH": vh_lin,
             "LIA": lia_deg,
         }
     )
     ds.rio.write_crs(vv.rio.crs, inplace=True)
+    for v in ds.data_vars:
+        ds[v].rio.write_nodata(np.nan, inplace=True)
     return ds
 
 
@@ -264,33 +267,64 @@ def build_s1_mosaic(
     print(f"Mosaicking {len(matching)} RTC product(s) for {date} orbit {orbit_str}...")
     datasets = [_read_rtc_product(pd) for pd in matching]
 
-    target_crs = datasets[0].rio.crs
-    deg_per_m = 1.0 / 111320.0
-    res_deg = target_resolution_m * deg_per_m
+    if bbox is not None:
+        minlon, minlat, maxlon, maxlat = bbox
+    else:
+        bounds = [d.rio.bounds() for d in (
+            d.rio.reproject("EPSG:4326") for d in datasets
+        )]
+        minlon = min(b[0] for b in bounds)
+        minlat = min(b[1] for b in bounds)
+        maxlon = max(b[2] for b in bounds)
+        maxlat = max(b[3] for b in bounds)
+
+    mid_lat = 0.5 * (minlat + maxlat)
+    deg_per_m_lat = 1.0 / 111320.0
+    target_dlat = target_resolution_m * deg_per_m_lat
+    target_dlon = target_dlat
+
+    n_lat = int(np.round((maxlat - minlat) / target_dlat))
+    n_lon = int(np.round((maxlon - minlon) / target_dlon))
+    out_lat = np.linspace(maxlat - target_dlat / 2, minlat + target_dlat / 2, n_lat)
+    out_lon = np.linspace(minlon + target_dlon / 2, maxlon - target_dlon / 2, n_lon)
+
+    template = xr.DataArray(
+        np.zeros((n_lat, n_lon), dtype="float64"),
+        coords={"y": out_lat, "x": out_lon},
+        dims=("y", "x"),
+    )
+    template.rio.write_crs("EPSG:4326", inplace=True)
 
     reprojected = []
     for ds in datasets:
-        ds_ll = ds.rio.reproject(
-            "EPSG:4326",
-            resolution=res_deg,
-            resampling=Resampling.average,
-        )
-        reprojected.append(ds_ll)
+        r = ds.rio.reproject_match(template, resampling=Resampling.average, nodata=np.nan)
+        reprojected.append(r)
 
-    mosaic = reprojected[0]
-    for ds_ll in reprojected[1:]:
-        ds_match = ds_ll.rio.reproject_match(mosaic, resampling=Resampling.average)
-        mosaic = mosaic.combine_first(ds_match)
-    mosaic.rio.write_crs("EPSG:4326", inplace=True)
+    stack_vv = xr.concat([r["VV"] for r in reprojected], dim="scene")
+    stack_vh = xr.concat([r["VH"] for r in reprojected], dim="scene")
+    stack_lia = xr.concat([r["LIA"] for r in reprojected], dim="scene")
+    coarse_vv = stack_vv.mean(dim="scene", skipna=True)
+    coarse_vh = stack_vh.mean(dim="scene", skipna=True)
+    coarse_lia = stack_lia.mean(dim="scene", skipna=True)
 
-    if bbox is not None:
-        minlon, minlat, maxlon, maxlat = bbox
-        mosaic = mosaic.rio.clip_box(minx=minlon, miny=minlat, maxx=maxlon, maxy=maxlat)
+    coarse_vv = coarse_vv.rename({"y": "lat", "x": "lon"})
+    coarse_vh = coarse_vh.rename({"y": "lat", "x": "lon"})
+    coarse_lia = coarse_lia.rename({"y": "lat", "x": "lon"})
 
-    mosaic = mosaic.rename({"x": "lon", "y": "lat"})
-    mosaic = mosaic.assign_coords(time=np.datetime64(f"{date[0:4]}-{date[4:6]}-{date[6:8]}"))
+    vv_db = 10.0 * np.log10(coarse_vv.where(coarse_vv > 0))
+    vh_db = 10.0 * np.log10(coarse_vh.where(coarse_vh > 0))
+    cr_db = vh_db - vv_db
 
-    mosaic.to_netcdf(out_path)
+    out = xr.Dataset(
+        {
+            "VV": vv_db,
+            "CR": cr_db,
+            "LIA": coarse_lia,
+        }
+    )
+    out = out.drop_vars("spatial_ref", errors="ignore")
+
+    out.to_netcdf(out_path)
     print(f"Wrote S1 mosaic: {out_path}")
     return out_path
 

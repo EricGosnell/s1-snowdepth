@@ -1,5 +1,7 @@
 from pathlib import Path
 from datetime import datetime
+import re
+import shutil
 import numpy as np
 import xarray as xr
 
@@ -22,6 +24,32 @@ def _baseline_dates(year: int, orbit: str, cfg: Config) -> list:
     return search_s1_scenes(start, end, orbit, cfg)
 
 
+def _cleanup_date_cache(work_dir: Path, date: str) -> None:
+    """
+    Delete RTC zips and unzipped product directories in `work_dir` whose source granule was acquired on `date`.
+    Keeps the daily mosaic NetCDF (already written elsewhere) and any RTCs from other dates intact. HyP3 retains the
+    server-side jobs so re-downloading is free if a rebuild is ever needed.
+
+    :param work_dir: Directory containing HyP3 RTC zips and/or unzipped products
+    :param date: Acquisition date in YYYYMMDD format
+    """
+    pattern = re.compile(rf"^S1[AB]_IW_{date}T\d{{6}}_")
+    bytes_freed = 0
+    for entry in work_dir.iterdir():
+        if not pattern.match(entry.name):
+            continue
+        if entry.is_file() and entry.suffix == ".zip":
+            bytes_freed += entry.stat().st_size
+            entry.unlink()
+        elif entry.is_dir():
+            for f in entry.rglob("*"):
+                if f.is_file():
+                    bytes_freed += f.stat().st_size
+            shutil.rmtree(entry)
+    if bytes_freed > 0:
+        print(f"  [{date}] Freed {bytes_freed / 1e9:.1f} GB of RTC cache")
+
+
 def create_s1_scaling(
     year: int,
     orbit: str,
@@ -30,6 +58,7 @@ def create_s1_scaling(
     bbox: tuple = None,
     target_resolution_m: int = 1000,
     quantile: float = 0.25,
+    keep_rtc_cache: bool = False,
 ) -> Path:
     """
     Build the per-orbit per-snow-year scaling NetCDF in the format 'S1_YYYY_OOO_scale.nc' (e.g. S1_2018_168_scale.nc)
@@ -52,6 +81,9 @@ def create_s1_scaling(
     :param bbox: Optional (minlon, minlat, maxlon, maxlat) to crop the scaling grid
     :param target_resolution_m: Output horizontal resolution in metres (default 1000)
     :param quantile: Percentile to use for scaling (default 0.25)
+    :param keep_rtc_cache: If False (default), delete each date's RTC zips/products after its daily mosaic is built.
+        Saves ~20 GB per date but a full rebuild requires re-downloading from HyP3 (jobs are still cached server-side,
+        so it's just bandwidth). Set True to retain everything for debugging or fast iteration.
 
     :return: Path to the written scaling NetCDF
     """
@@ -102,6 +134,9 @@ def create_s1_scaling(
 
         ds = xr.open_dataset(mosaic_path).expand_dims(time=[np.datetime64(f"{date[0:4]}-{date[4:6]}-{date[6:8]}")])
         daily_mosaics.append(ds)
+
+        if not keep_rtc_cache:
+            _cleanup_date_cache(work_dir, date)
 
     if not daily_mosaics:
         raise RuntimeError(f"No daily mosaics could be built for orbit {orbit_str} in {year}; cannot compute scaling")

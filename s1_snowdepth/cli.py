@@ -115,7 +115,10 @@ def download_sample_data(output_dir):
 @click.option("--year", required=True, type=int, help="Snow year (the calendar year of the Aug-Dec baseline window)")
 @click.option("--bbox", default=None,
               help="Optional 'minlon,minlat,maxlon,maxlat' to crop the scaling grid. Defaults to GEE_SEARCH_BBOX.")
-def build_scaling(orbit, year, bbox):
+@click.option("--keep-rtc-cache", is_flag=True, default=False,
+              help="Keep all per-date HyP3 RTC zips/products after each daily mosaic is built. "
+                   "Default cleans them up to save disk (~20 GB per date).")
+def build_scaling(orbit, year, bbox, keep_rtc_cache):
     """Build the S1_YYYY_OOO_scale.nc file for a given orbit and snow year by submitting
     Aug-Dec acquisitions to ASF HyP3, mosaicking each, and computing the per-pixel 25th percentile."""
     cfg = Config()
@@ -124,7 +127,7 @@ def build_scaling(orbit, year, bbox):
         bbox_tuple = tuple(float(x) for x in bbox.split(","))
         if len(bbox_tuple) != 4:
             raise click.ClickException("--bbox must be 'minlon,minlat,maxlon,maxlat'")
-    out_path = create_s1_scaling(year=year, orbit=orbit, cfg=cfg, bbox=bbox_tuple)
+    out_path = create_s1_scaling(year=year, orbit=orbit, cfg=cfg, bbox=bbox_tuple, keep_rtc_cache=keep_rtc_cache)
     click.echo(f"Built scaling file: {out_path}")
 
 @main.command()

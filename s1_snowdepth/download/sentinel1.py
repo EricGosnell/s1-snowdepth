@@ -114,6 +114,7 @@ def submit_rtc_jobs(scenes: list, work_dir: Path, cfg: Config, job_name: str = N
         for j in existing
         if j.status_code in ("SUCCEEDED", "RUNNING", "PENDING")
     }
+    pending = Batch([j for j in existing if j.status_code in ("RUNNING", "PENDING")])
 
     submitted = Batch()
     for s in scenes:
@@ -131,9 +132,13 @@ def submit_rtc_jobs(scenes: list, work_dir: Path, cfg: Config, job_name: str = N
             speckle_filter=False,
         )
 
-    if len(submitted) > 0:
-        print(f"Submitted {len(submitted)} new RTC job(s); waiting for completion...")
-        submitted = hyp3.watch(submitted)
+    to_watch = submitted + pending
+    if len(to_watch) > 0:
+        if len(submitted) > 0:
+            print(f"Submitted {len(submitted)} new RTC job(s)")
+        if len(pending) > 0:
+            print(f"Waiting on {len(pending)} previously-submitted RTC job(s) still running")
+        hyp3.watch(to_watch)
 
     all_jobs = hyp3.find_jobs(name=job_name)
     succeeded = Batch([j for j in all_jobs if j.status_code == "SUCCEEDED"])

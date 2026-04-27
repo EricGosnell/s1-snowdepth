@@ -6,6 +6,7 @@ from pathlib import Path
 
 from s1_snowdepth.config import Config
 from s1_snowdepth.run.run_model_script import run as run_model
+from s1_snowdepth.preprocessing.s1_scaling import create_s1_scaling
 
 @click.group()
 def main():
@@ -108,6 +109,23 @@ def download_sample_data(output_dir):
         f"  S1_SCALING_DIR={output_dir}/s1_scaling/\n"
         f"  SNOW_COVER_DIR={output_dir}/snow_cover/\n"
     )
+
+@main.command(name="build-scaling")
+@click.option("--orbit", required=True, help="Relative orbit number, e.g. 168")
+@click.option("--year", required=True, type=int, help="Snow year (the calendar year of the Aug-Dec baseline window)")
+@click.option("--bbox", default=None,
+              help="Optional 'minlon,minlat,maxlon,maxlat' to crop the scaling grid. Defaults to GEE_SEARCH_BBOX.")
+def build_scaling(orbit, year, bbox):
+    """Build the S1_YYYY_OOO_scale.nc file for a given orbit and snow year by submitting
+    Aug-Dec acquisitions to ASF HyP3, mosaicking each, and computing the per-pixel 25th percentile."""
+    cfg = Config()
+    bbox_tuple = None
+    if bbox:
+        bbox_tuple = tuple(float(x) for x in bbox.split(","))
+        if len(bbox_tuple) != 4:
+            raise click.ClickException("--bbox must be 'minlon,minlat,maxlon,maxlat'")
+    out_path = create_s1_scaling(year=year, orbit=orbit, cfg=cfg, bbox=bbox_tuple)
+    click.echo(f"Built scaling file: {out_path}")
 
 @main.command()
 def run():

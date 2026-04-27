@@ -189,13 +189,19 @@ def _filter_products_for_date_orbit(product_dirs: list, date: str, scenes: list)
     return matching
 
 
-def _read_rtc_product(product_dir: Path) -> xr.Dataset:
+def _read_rtc_product(product_dir: Path, bbox: tuple = None) -> xr.Dataset:
     """
     Read an unzipped HyP3 RTC product into an xarray Dataset with VV and VH in linear gamma0 power, and LIA in degrees.
     We deliberately keep VV and VH in linear power so they can be safely spatially averaged when reprojecting to
     coarser grids (averaging dB values is not physically meaningful).
+    The dB conversion and the CR = VH - VV reduction are deferred to build_s1_mosaic.
+
+    If `bbox` is given, the source rasters are window-read clipped to the bbox in
+    their native CRS before any other processing — this dramatically reduces memory
+    usage when the area of interest is much smaller than a full S1 frame.
 
     :param product_dir: Path to an extracted HyP3 RTC product directory
+    :param bbox: Optional (minlon, minlat, maxlon, maxlat) in EPSG:4326 to clip the source
     :return: xr.Dataset with data_vars VV (linear), VH (linear), LIA (deg) on the product's native CRS/grid
     """
     name = product_dir.name
@@ -203,13 +209,24 @@ def _read_rtc_product(product_dir: Path) -> xr.Dataset:
     vh_path = product_dir / f"{name}_VH.tif"
     inc_path = product_dir / f"{name}_inc_map.tif"
 
-    vv = rioxarray.open_rasterio(vv_path).squeeze(drop=True)
-    vh = rioxarray.open_rasterio(vh_path).squeeze(drop=True)
-    inc = rioxarray.open_rasterio(inc_path).squeeze(drop=True)
+    vv = rioxarray.open_rasterio(vv_path, masked=False).squeeze(drop=True)
+    vh = rioxarray.open_rasterio(vh_path, masked=False).squeeze(drop=True)
+    inc = rioxarray.open_rasterio(inc_path, masked=False).squeeze(drop=True)
 
-    vv_lin = vv.where(vv > 0).astype("float64")
-    vh_lin = vh.where(vh > 0).astype("float64")
-    lia_deg = np.rad2deg(inc.where(inc > 0)).astype("float64")
+    if bbox is not None:
+        minlon, minlat, maxlon, maxlat = bbox
+        try:
+            vv = vv.rio.clip_box(minx=minlon, miny=minlat, maxx=maxlon, maxy=maxlat, crs="EPSG:4326")
+            vh = vh.rio.clip_box(minx=minlon, miny=minlat, maxx=maxlon, maxy=maxlat, crs="EPSG:4326")
+            inc = inc.rio.clip_box(minx=minlon, miny=minlat, maxx=maxlon, maxy=maxlat, crs="EPSG:4326")
+        except Exception as e:
+            raise FileNotFoundError(
+                f"RTC product {name} does not intersect bbox {bbox}: {e}"
+            )
+
+    vv_lin = vv.where(vv > 0).astype("float32")
+    vh_lin = vh.where(vh > 0).astype("float32")
+    lia_deg = np.rad2deg(inc.where(inc > 0)).astype("float32")
 
     ds = xr.Dataset(
         {
@@ -270,14 +287,19 @@ def build_s1_mosaic(
         )
 
     print(f"Mosaicking {len(matching)} RTC product(s) for {date} orbit {orbit_str}...")
-    datasets = [_read_rtc_product(pd) for pd in matching]
 
     if bbox is not None:
         minlon, minlat, maxlon, maxlat = bbox
     else:
-        bounds = [d.rio.bounds() for d in (
-            d.rio.reproject("EPSG:4326") for d in datasets
-        )]
+        bounds = []
+        for pd in matching:
+            vv_path = pd / f"{pd.name}_VV.tif"
+            with rioxarray.open_rasterio(vv_path) as src:
+                native_bounds = src.rio.bounds()
+                src_crs = src.rio.crs
+            from rasterio.warp import transform_bounds
+            ll_bounds = transform_bounds(src_crs, "EPSG:4326", *native_bounds)
+            bounds.append(ll_bounds)
         minlon = min(b[0] for b in bounds)
         minlat = min(b[1] for b in bounds)
         maxlon = max(b[2] for b in bounds)
@@ -301,9 +323,23 @@ def build_s1_mosaic(
     template.rio.write_crs("EPSG:4326", inplace=True)
 
     reprojected = []
-    for ds in datasets:
+    for i, pd in enumerate(matching):
+        print(f"  reprojecting {i + 1}/{len(matching)}: {pd.name}")
+        try:
+            ds = _read_rtc_product(pd, bbox=(minlon, minlat, maxlon, maxlat))
+        except FileNotFoundError as e:
+            print(f"    skipped: {e}")
+            continue
         r = ds.rio.reproject_match(template, resampling=Resampling.average, nodata=np.nan)
+        if hasattr(r, "compute"):
+            r = r.compute()
         reprojected.append(r)
+        del ds, r
+
+    if not reprojected:
+        raise RuntimeError(
+            f"No RTC products for {date} orbit {orbit_str} intersect the bbox"
+        )
 
     stack_vv = xr.concat([r["VV"] for r in reprojected], dim="scene")
     stack_vh = xr.concat([r["VH"] for r in reprojected], dim="scene")

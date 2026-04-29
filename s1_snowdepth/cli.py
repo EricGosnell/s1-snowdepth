@@ -179,3 +179,51 @@ def run():
     cfg = Config()
     run_model(cfg)
     
+
+@main.command(name="download-ims")
+@click.argument("date")
+@click.option("--output-dir", default=None, help="Directory to save IMS data")
+def download_ims_cmd(date, output_dir):
+    from s1_snowdepth.download.ims import download_ims
+    cfg = Config()
+    out = Path(output_dir) if output_dir else cfg.snow_cover_dir / "ims"
+    click.echo(f"Downloading IMS snow cover for {date}.")
+    path = download_ims(date=date, output_dir=out, cfg=cfg)
+    click.echo(f"Saved to: {path}")
+
+
+@main.command(name="download-modis")
+@click.argument("date")
+@click.option("--output-dir", default=None, help="Directory to save MODIS data")
+def download_modis_cmd(date, output_dir):
+    from s1_snowdepth.download.modis import download_modis
+    cfg = Config()
+    out = Path(output_dir) if output_dir else cfg.snow_cover_dir / "modis"
+    click.echo(f"Downloading MODIS snow cover for {date}.")
+    path = download_modis(date=date, output_dir=out, cfg=cfg)
+    click.echo(f"Saved to: {path}")
+
+
+@main.command(name="download-s1")
+@click.argument("date")
+@click.option("--orbit", required=True, help="Relative orbit number, e.g. 168")
+@click.option("--output-dir", default=None, help="Directory to save S1 scenes")
+def download_s1_cmd(date, orbit, output_dir):
+    from s1_snowdepth.download.sentinel1 import search_and_download_s1
+    from datetime import datetime, timedelta
+    cfg = Config()
+    out = Path(output_dir) if output_dir else cfg.s1_mosaic_dir
+    date_dt = datetime.strptime(date, "%Y%m%d")
+    start = date_dt - timedelta(days=1)
+    end = date_dt + timedelta(days=1)
+    click.echo(f"Searching ASF for Sentinel-1 scenes on {date} orbit {orbit}.")
+    files = search_and_download_s1(
+        start_date=start,
+        end_date=end,
+        orbit=orbit,
+        cfg=cfg,
+    )
+    if not files:
+        click.echo("No scenes found or downloaded.")
+    else:
+        click.echo(f"Downloaded {len(files)} scene(s) to {out}")

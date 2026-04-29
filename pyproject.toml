@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "s1-snowdepth"
-version = "0.1.0"
+version = "0.1.1"
 description = "Tools for operationalizing Dr. Dunmire's machine learning model to estimate snow depth across the European Alps using Sentinel-1 SAR backscatter."
 requires-python = ">=3.9"
 dependencies = [

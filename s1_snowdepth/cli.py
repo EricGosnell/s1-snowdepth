@@ -7,6 +7,8 @@ from pathlib import Path
 from s1_snowdepth.config import Config
 from s1_snowdepth.run.run_model_script import run as run_model
 from s1_snowdepth.preprocessing.s1_scaling import create_s1_scaling
+from s1_snowdepth.download.sentinel1 import create_s1_mosaic
+from s1_snowdepth.preprocessing.snow_cover_fraction import compute_cumulative_scf
 
 @click.group()
 def main():
@@ -130,6 +132,40 @@ def build_scaling(orbit, year, bbox, keep_rtc_cache):
     out_path = create_s1_scaling(year=year, orbit=orbit, cfg=cfg, bbox=bbox_tuple, keep_rtc_cache=keep_rtc_cache)
     click.echo(f"Built scaling file: {out_path}")
 
+@main.command(name="create-s1-mosaic")
+@click.option("--date", required=True, help="Acquisition date in YYYYMMDD format")
+@click.option("--orbit", required=True, help="Relative orbit number, e.g. 168")
+@click.option("--bbox", default=None,
+              help="Optional 'minlon,minlat,maxlon,maxlat' to crop the mosaic. Defaults to the full S1 footprint.")
+def create_s1_mosaic_cmd(date, orbit, bbox):
+    """Download Sentinel-1 GRDs for a given date and orbit, submit RTC processing to ASF HyP3,
+    and build the S1mosaic_YYYYMMDD_OOO_PASS.nc file under S1_MOSAIC_DIR."""
+    cfg = Config()
+    bbox_tuple = None
+    if bbox:
+        bbox_tuple = tuple(float(x) for x in bbox.split(","))
+        if len(bbox_tuple) != 4:
+            raise click.ClickException("--bbox must be 'minlon,minlat,maxlon,maxlat'")
+    out_path = create_s1_mosaic(date=date, orbit=orbit, cfg=cfg, bbox=bbox_tuple)
+    click.echo(f"Built S1 mosaic: {out_path}")
+
+@main.command(name="create-snowcover")
+@click.argument("date")
+def create_snowcover(date):
+    """Build the snowcover_YYYYMMDD_.nc file by averaging IMS binary snow cover with MODIS MOD10A1
+    fractional snow cover (5-day gap-filled). Region is set by GEE_SEARCH_BBOX in your .env."""
+    cfg = Config()
+    cfg.snow_cover_dir.mkdir(parents=True, exist_ok=True)
+    ims_dir = cfg.snow_cover_dir / "ims"
+    modis_dir = cfg.snow_cover_dir / "modis"
+    out_path = cfg.snow_cover_dir / f"snowcover_{date}_.nc"
+    if out_path.exists():
+        click.echo(f"Snow cover file already exists: {out_path}")
+        return
+    ds = compute_cumulative_scf(date, ims_dir, modis_dir, cfg)
+    ds.to_netcdf(out_path)
+    click.echo(f"Built snow cover file: {out_path}")
+
 @main.command()
 def run():
     """Run the snow depth estimation model over all S1 mosaic files."""
@@ -142,3 +178,4 @@ def run():
         )
     cfg = Config()
     run_model(cfg)
+    

@@ -21,7 +21,7 @@ dependencies = [
     "click",
     "requests",
     "huggingface-hub",
-    "hyp3-sdk",
+    "hyp3_sdk",
 ]
 
 [project.optional-dependencies]

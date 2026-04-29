@@ -6,3 +6,6 @@ __pycache__/
 *.egg-info/
 tests/data/
 *.log
+.pypirc
+build/
+dist/

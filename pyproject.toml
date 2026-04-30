@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "s1-snowdepth"
-version = "0.2.0"
+version = "0.2.2"
 description = "Tools for operationalizing Dr. Dunmire's machine learning model to estimate snow depth across the European Alps using Sentinel-1 SAR backscatter."
 requires-python = ">=3.9"
 dependencies = [
@@ -22,6 +22,8 @@ dependencies = [
     "requests",
     "huggingface-hub",
     "hyp3_sdk",
+    "joblib",
+    "shap",
 ]
 
 [project.optional-dependencies]
@@ -34,7 +36,7 @@ dev = [
 where = ["."]
 
 [tool.setuptools.package-data]
-s1-snowdepth = ["environment.yml", ".env.example"]
+s1_snowdepth = ["environment.yml", ".env.example", "final_model_xg.pkl"]
 
 [project.scripts]
 s1-snowdepth = "s1_snowdepth.cli:main"

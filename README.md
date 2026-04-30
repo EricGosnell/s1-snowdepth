@@ -17,11 +17,12 @@ The pip package includes all dependencies for downloading and preprocessing the 
 In both cases, you must have a .env file containing the necessary filepaths and API keys. See the section below for more details on the .env file.
 
 ### Conda
+Pre-requisite: You must have some version of conda installed, such as miniconda.
+
 To install the conda environment, run the command `s1-snowdepth env-create` which installs a conda environment from _environment.yml_.
-You must then deactivate the virtual environment the package was installed in, activate the conda environment, and reinstall this package within conda.
+You must then deactivate the virtual environment the package was installed in, and activate the conda environment.
 - `deactivate`
 - `conda activate s1-snowdepth`
-- `pip install --index-url https://test.pypi.org/simple/ --extra-index-url https://pypi.org/simple/ s1-snowdepth`
 
 ### Downloading static variables
 One of the inputs to the model is a set of static terrain variables over the Alps. This includes elevation, slope, aspect, TPI, snowclass, and many more. 

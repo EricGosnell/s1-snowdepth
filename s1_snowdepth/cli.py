@@ -1,7 +1,7 @@
 import click
 import subprocess
 import shutil
-import importlib.resources
+from importlib.resources import as_file, files import as_file, files
 from pathlib import Path
 
 from s1_snowdepth.config import Config
@@ -20,7 +20,7 @@ def init():
     env_dest = Path.cwd() / ".env"
     if env_dest.exists():
         raise click.ClickException(".env already exists in current directory.")
-    with importlib.resources.files("s1_snowdepth").joinpath(".env.example") as env_src:
+    with as_file(files("s1_snowdepth").joinpath(".env.example")) as env_src:
         shutil.copy(str(env_src), str(env_dest))
     click.echo(f".env created at {env_dest}. Please fill in the required values.")
 
@@ -33,7 +33,7 @@ def env_create():
             "Please install Miniconda or Anaconda first: "
             "https://docs.conda.io/en/latest/miniconda.html"
         )
-    with importlib.resources.files("s1_snowdepth").joinpath("environment.yml") as env_path:
+    with as_file(files("s1_snowdepth").joinpath("environment.yml")) as env_path:
         subprocess.run(["conda", "env", "create", "-f", str(env_path)], check=True)
 
     click.echo(
@@ -50,7 +50,7 @@ def download_model(output_dir):
     output_dir = Path(output_dir)
     output_dir.mkdir(parents=True, exist_ok=True)
     click.echo("Downloading final_model_xg.pkl...")
-    with importlib.resources.files("s1_snowdepth").joinpath("final_model_xg.pkl") as pkl_src:
+    with as_file(files("s1_snowdepth").joinpath("final_model_xg.pkl")) as pkl_src:
         shutil.copy(str(pkl_src), output_dir / "final_model_xg.pkl")
     click.echo(f"final_model_xg.pkl downloaded to {output_dir}/final_model_xg.pkl.")
     click.echo(f"Update your .env to point to the model file:\n"

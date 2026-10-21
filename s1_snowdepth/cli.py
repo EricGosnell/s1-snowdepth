@@ -2,6 +2,7 @@ import click
 import subprocess
 import shutil
 from importlib.resources import as_file, files
+from pathlib import Path
 
 from s1_snowdepth.config import Config
 from s1_snowdepth.run.run_model_script import run as run_model
